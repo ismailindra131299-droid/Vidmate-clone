@@ -1,0 +1,148 @@
+import React, { useState } from 'react';
+import { extractVideo } from './services/extractor';
+
+interface VideoInfo {
+  status: string;
+  message: string;
+  title?: string;
+  thumbnail?: string;
+  duration?: string;
+  download_url?: string;
+  target_url?: string;
+}
+
+export default function App() {
+  const [url, setUrl] = useState('');
+  const [quality, setQuality] = useState('best');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<VideoInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+
+    setLoading(false);
+    setResult(null);
+    setError(null);
+    setLoading(true);
+
+    try {
+      const data = await extractVideo(url, quality);
+      if (data.status === 'success') {
+        setResult(data);
+      } else {
+        setError(data.message || 'Gagal mengekstrak video');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan sistem saat menghubungi backend.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-zinc-900 text-zinc-100 flex flex-col items-center py-10 px-4 font-sans">
+      <div className="w-full max-w-md bg-zinc-800 rounded-2xl shadow-xl p-6 border border-zinc-700">
+        
+        {/* Header Title */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-orange-500 tracking-wide">VidMate Clone</h1>
+          <p className="text-xs text-zinc-400 mt-1">AI Video Downloader & Processor</p>
+        </div>
+
+        {/* Input Form */}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-semibold text-zinc-300 mb-2">URL Video:</label>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Tempel tautan video di sini..."
+              className="w-full bg-zinc-900 border border-zinc-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-500 text-zinc-100 placeholder-zinc-500 transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-zinc-300 mb-2">Kualitas Video:</label>
+            <select
+              value={quality}
+              onChange={(e) => setQuality(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-orange-500 text-zinc-100 transition-all"
+            >
+              <option value="best">Kualitas Terbaik (Best)</option>
+              <option value="worst">Kualitas Standar (Low)</option>
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-600 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-lg active:scale-[0.99]"
+          >
+            {loading ? 'Sedang Memproses...' : 'Unduh Video'}
+          </button>
+        </form>
+
+        {/* Blok Tampilan Hasil Kembalian dari FastAPI */}
+        {result && (
+          <div className="mt-6 bg-emerald-950/40 border border-emerald-500/50 rounded-xl p-5 space-y-4">
+            <div className="flex items-center space-x-2 text-emerald-400 font-bold">
+              <span>🎉</span>
+              <span>Berhasil Dikirim!</span>
+            </div>
+            
+            <div className="text-xs space-y-1.5 text-zinc-300 border-b border-zinc-700/60 pb-3">
+              <p><span className="font-semibold text-zinc-400">Status:</span> <span className="text-emerald-400 font-medium">{result.status}</span></p>
+              <p><span className="font-semibold text-zinc-400">Pesan:</span> {result.message}</p>
+            </div>
+
+            {/* Bagian Visualisasi Informasi Video Utama */}
+            <div className="space-y-4">
+              <h3 className="text-base font-bold text-zinc-100 leading-snug">
+                {result.title || "Video Hasil Ekstraksi"}
+              </h3>
+              
+              {result.duration && (
+                <p className="text-xs text-zinc-400">
+                  ⏱️ Durasi: <span className="text-zinc-200 font-medium">{result.duration}</span>
+                </p>
+              )}
+
+              {result.thumbnail && (
+                <div className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-md">
+                  <img 
+                    src={result.thumbnail} 
+                    alt="Video Thumbnail" 
+                    className="w-full h-auto object-cover max-h-60 mx-auto" 
+                  />
+                </div>
+              )}
+
+              {result.download_url && (
+                <a
+                  href={result.download_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold py-3.5 px-4 rounded-xl text-center shadow-lg transition-all active:scale-[0.98] text-sm"
+                >
+                  🚀 KLIK DI SINI UNTUK UNDUH VIDEO
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Blok Tampilan Kendala / Eror */}
+        {error && (
+          <div className="mt-6 bg-rose-950/40 border border-rose-500/50 rounded-xl p-5 text-sm text-rose-300">
+            <div className="font-bold mb-1">Error: Gagal memproses video:</div>
+            <p className="text-xs leading-relaxed break-words">{error}</p>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
