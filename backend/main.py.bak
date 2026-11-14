@@ -1,0 +1,118 @@
+import re
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import yt_dlp
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class DownloadRequest(BaseModel):
+    url: str
+    quality: str = "best"
+
+def format_duration(duration_seconds):
+    if not duration_seconds:
+        return "00:00"
+    try:
+        seconds = int(duration_seconds)
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+    except:
+        return "00:00"
+
+@app.get("/api/trending")
+async def get_trending_videos():
+    try:
+        ydl_opts = {'format': 'best', 'noplaylist': True, 'quiet': True, 'extract_flat': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info("ytsearch10:musik indonesia terbaru 2026", download=False)
+            videos = []
+            if 'entries' in info_dict:
+                for entry in info_dict['entries']:
+                    video_id = entry.get("id", "")
+                    if not video_id: continue
+                    
+                    # Link gambar langsung resmi yang aman dari blokir browser HP
+                    img_url = f"https://youtube.com{video_id}/mqdefault.jpg"
+                    
+                    videos.append({
+                        "id": video_id,
+                        "title": entry.get("title", "Video Tanpa Judul"),
+                        "channel": entry.get("uploader", "Saluran Tidak Diketahui"),
+                        "views": "Rekomendasi",
+                        "time": "Hari ini",
+                        "duration": format_duration(entry.get("duration")),
+                        "thumbnail": img_url,
+                        "videoUrl": f"https://youtube.com{video_id}"
+                    })
+            return {"status": "success", "videos": videos}
+    except:
+        return {"status": "fallback", "videos": []}
+
+@app.get("/api/search")
+async def search_videos(q: str = ""):
+    try:
+        ydl_opts = {'format': 'best', 'noplaylist': True, 'quiet': True, 'extract_flat': True}
+        videos = []
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            keyword_search = q.strip() if q.strip() else "lagu tren indonesia terupdate"
+            info_dict = ydl.extract_info(f"ytsearch12:{keyword_search}", download=False)
+            
+            if 'entries' in info_dict:
+                for entry in info_dict['entries']:
+                    video_id = entry.get("id", "")
+                    if not video_id: continue
+                        
+                    # Link gambar langsung resmi yang aman dari blokir browser HP
+                    img_url = f"https://youtube.com{video_id}/mqdefault.jpg"
+                    
+                    videos.append({
+                        "id": video_id,
+                        "title": entry.get("title", "Video"),
+                        "channel": entry.get("uploader", "Unknown"),
+                        "views": "Hasil Pencarian",
+                        "time": "Baru",
+                        "duration": format_duration(entry.get("duration")),
+                        "thumbnail": img_url,
+                        "videoUrl": f"https://youtube.com{video_id}"
+                    })
+            return {"status": "success", "videos": videos}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "videos": []}
+
+@app.post("/api/download")
+async def download_video(request: DownloadRequest):
+    try:
+        input_user = request.url.strip()
+        is_url = re.match(r'^https?://', input_user)
+        url_target = input_user if is_url else f"ytsearch1: {input_user}"
+        ydl_opts = {'format': 'bestvideo+bestaudio/best', 'noplaylist': True, 'quiet': True, 'skip_download': True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url_target, download=False)
+            if 'entries' in info_dict:
+                if len(info_dict['entries']) > 0: info_dict = info_dict['entries']
+                else: raise HTTPException(status_code=404, detail="Video tidak ditemukan")
+            download_url = info_dict.get('url')
+            if not download_url and 'formats' in info_dict:
+                valid_formats = [f for f in info_dict['formats'] if f.get('url')]
+                if valid_formats: download_url = valid_formats[-1]['url']
+            if not download_url: raise HTTPException(status_code=400, detail="Tautan unduhan tidak ditemukan")
+            return {"status": "success", "title": info_dict.get('title', 'Video'), "download_url": download_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)

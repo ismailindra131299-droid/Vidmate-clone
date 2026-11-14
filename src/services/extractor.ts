@@ -1,5 +1,5 @@
 // Konfigurasi URL Backend API Anda (Sesuaikan port jika berbeda)
-const BACKEND_API_URL = 'http://localhost:8000/api/download';
+const BACKEND_API_URL = 'http://localhost:5000/api/download';
 
 export interface VideoInfo {
   status: string;

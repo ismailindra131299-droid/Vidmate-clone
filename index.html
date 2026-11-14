@@ -1,13 +1,22 @@
 <!doctype html>
 <html lang="id" translate="no">
   <head>
+    <meta name="color-scheme" content="light only" />
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>vidmate-clone</title>
+      <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#f97316" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+      <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+      }
+    </script>
   </body>
 </html>
