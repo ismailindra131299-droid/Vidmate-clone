@@ -2,7 +2,7 @@ import { getAllUserMedia } from "./deviceMedia";
 void getAllUserMedia;
 import React, { useState, useEffect } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "https://51c9f70f8d37e4.lhr.life";
+const API_URL = import.meta.env.VITE_API_URL || "https://ismailvidmate.serveousercontent.com";
 
 export default function App() {
   const [tab, setTab] = useState("rumah");
