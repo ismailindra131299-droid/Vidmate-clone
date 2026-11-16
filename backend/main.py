@@ -219,38 +219,79 @@ def download_file(filename: str, url: str):
     return StreamingResponse(iterfile(), media_type="application/octet-stream", headers=headers)
 
 
-DOWNLOAD_DIR = os.path.expanduser("~/storage/downloads")
-if not os.path.exists(DOWNLOAD_DIR):
-    DOWNLOAD_DIR = "/storage/emulated/0/Download"
+STORAGE_ROOTS = [
+    "/storage/emulated/0",
+    os.path.expanduser("~/storage/shared"),
+]
+STORAGE_ROOT = next((p for p in STORAGE_ROOTS if os.path.exists(p)), os.path.expanduser("~/storage/downloads"))
+
+AUDIO_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac")
+VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov", ".3gp", ".avi")
+SKIP_DIRS = {"Android", ".thumbnails", ".cache", "cache", "tmp", ".git", "node_modules"}
+
+def scan_all_device_media():
+    items = []
+    seen_paths = set()
+    if not os.path.exists(STORAGE_ROOT):
+        return items
+    for root, dirs, files in os.walk(STORAGE_ROOT):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS]
+        for fname in files:
+            if fname.startswith("."):
+                continue
+            low = fname.lower()
+            if not (low.endswith(AUDIO_EXTS) or low.endswith(VIDEO_EXTS)):
+                continue
+            fpath = os.path.join(root, fname)
+            if fpath in seen_paths:
+                continue
+            seen_paths.add(fpath)
+            try:
+                stat = os.stat(fpath)
+                size_mb = round(stat.st_size / (1024 * 1024), 2)
+                if size_mb < 0.05:
+                    continue
+                mtime_raw = stat.st_mtime
+                mtime = datetime.fromtimestamp(mtime_raw).strftime("%Y-%m-%d")
+                ext = fname.rsplit(".", 1)[-1].upper()
+                is_audio = low.endswith(AUDIO_EXTS)
+                folder_name = os.path.basename(root) or "Internal"
+                items.append({
+                    "name": fname,
+                    "folder": folder_name,
+                    "size": f"{size_mb} MB",
+                    "date": mtime,
+                    "mtime": mtime_raw,
+                    "ext": ext,
+                    "type": "audio" if is_audio else "video",
+                    "url": f"http://localhost:5000/api/local-media?path={quote(fpath)}"
+                })
+            except Exception:
+                continue
+    items.sort(key=lambda x: x["mtime"], reverse=True)
+    return items
 
 @app.get("/api/local-files")
 def list_local_files():
-    items = []
-    if os.path.exists(DOWNLOAD_DIR):
-        for fname in sorted(os.listdir(DOWNLOAD_DIR), key=lambda x: os.path.getmtime(os.path.join(DOWNLOAD_DIR, x)), reverse=True):
-            if fname.startswith("."):
-                continue
-            if fname.lower().endswith((".mp4", ".m4a", ".mp3", ".webm")):
-                fpath = os.path.join(DOWNLOAD_DIR, fname)
-                size_mb = round(os.path.getsize(fpath) / (1024 * 1024), 2)
-                mtime = datetime.fromtimestamp(os.path.getmtime(fpath)).strftime("%Y-%m-%d")
-                ext = fname.split(".")[-1].upper()
-                is_audio = fname.lower().endswith((".m4a", ".mp3"))
-                items.append({
-                    "name": fname,
-                    "size": f"{size_mb} MB",
-                    "date": mtime,
-                    "ext": ext,
-                    "type": "audio" if is_audio else "video",
-                    "url": f"http://localhost:5000/api/local-media/{quote(fname)}"
-                })
-    return {"files": items}
+    return {"files": scan_all_device_media()}
+
+@app.get("/api/local-media")
+def serve_local_media_by_path(path: str):
+    real_root = os.path.realpath(STORAGE_ROOT)
+    real_path = os.path.realpath(path)
+    if real_path.startswith(real_root) and os.path.isfile(real_path):
+        return FileResponse(real_path)
+    raise HTTPException(status_code=404, detail="File tidak ditemukan")
 
 @app.get("/api/local-media/{filename}")
 def serve_local_media(filename: str):
-    fpath = os.path.join(DOWNLOAD_DIR, filename)
-    if os.path.exists(fpath):
-        return FileResponse(fpath)
+    from urllib.parse import unquote
+    for item in scan_all_device_media():
+        if item["name"] == filename:
+            raw_path = item["url"].split("path=", 1)[-1]
+            fpath = unquote(raw_path)
+            if os.path.isfile(fpath):
+                return FileResponse(fpath)
     raise HTTPException(status_code=404, detail="File tidak ditemukan")
 
 if __name__ == "__main__":

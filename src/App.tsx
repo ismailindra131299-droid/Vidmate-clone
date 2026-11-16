@@ -1,6 +1,8 @@
+import { getAllUserMedia } from "./deviceMedia";
+void getAllUserMedia;
 import React, { useState, useEffect } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || API_URL + "";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function App() {
   const [tab, setTab] = useState("rumah");
@@ -11,6 +13,75 @@ export default function App() {
   const [videos, setVideos] = useState<any[]>([]);
   const [activeVid, setActiveVid] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
+  const [dlTask, setDlTask] = useState<{
+    active: boolean;
+    title: string;
+    thumb: string;
+    progress: number;
+    loadedMB: string;
+    totalMB: string;
+    status: "downloading" | "done" | "error";
+    ext: string;
+  } | null>(null);
+
+  const startModernDownload = async () => {
+    if (!dlUrl) return;
+    const ext = selIdx.startsWith("audio") ? "M4A" : "MP4";
+    const cleanName = ((typeof dlName !== "undefined" && dlName) || activeVid?.title || "media")
+      .replace(/[\/*?:"<>|]/g, "")
+      .trim() + "." + ext.toLowerCase();
+    const fullUrl = `${API_URL}/api/download/${encodeURIComponent(cleanName)}?url=${encodeURIComponent(dlUrl)}`;
+
+    setShowModal(false);
+    setDlTask({
+      active: true,
+      title: cleanName,
+      thumb: activeVid?.thumbnail || "",
+      progress: 0,
+      loadedMB: "0.0",
+      totalMB: "...",
+      status: "downloading",
+      ext,
+    });
+
+    try {
+      const response = await fetch(fullUrl);
+      if (!response.ok || !response.body) throw new Error("Gagal mengunduh");
+      const contentLength = Number(response.headers.get("Content-Length") || 0);
+      const totalMB = contentLength > 0 ? (contentLength / (1024 * 1024)).toFixed(1) : "?";
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          const loadedMB = (received / (1024 * 1024)).toFixed(1);
+          const pct = contentLength > 0 ? Math.min(99, Math.round((received / contentLength) * 100)) : 50;
+          setDlTask((prev) => prev ? { ...prev, progress: pct, loadedMB, totalMB } : null);
+        }
+      }
+
+      const blob = new Blob(chunks as BlobPart[], { type: ext === "M4A" ? "audio/mp4" : "video/mp4" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = cleanName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+      setDlTask((prev) =>
+        prev ? { ...prev, progress: 100, loadedMB: (received / (1024 * 1024)).toFixed(1), totalMB: (received / (1024 * 1024)).toFixed(1), status: "done" } : null
+      );
+    } catch (e) {
+      setDlTask((prev) => (prev ? { ...prev, status: "error" } : null));
+    }
+  };
   const [loadingFmt, setLoadingFmt] = useState(false);
   const [formats, setFormats] = useState<any[]>([]);
   const [dlUrl, setDlUrl] = useState("");
@@ -362,7 +433,7 @@ export default function App() {
               {/* Header File Saya (Gambar 4) */}
               <div className="px-4 pt-4 pb-2 bg-white sticky top-0 z-20 border-b border-zinc-100">
                 <div className="flex items-center justify-between mb-3">
-                  <h1 className="text-lg font-extrabold text-zinc-900">File Saya</h1>
+                  <h1 className="text-lg font-extrabold text-white">File Saya</h1>
                   <button
                     onClick={() => fetch(API_URL + "/api/local-files").then(r=>r.json()).then(d=>setLocalFiles(d.files||[]))}
                     className="text-xs font-semibold text-rose-500"
@@ -380,7 +451,7 @@ export default function App() {
                       key={t.id}
                       onClick={() => setFileFilter(t.id)}
                       className={`pb-2 relative ${
-                        fileFilter === t.id ? "text-zinc-900" : "text-zinc-400 font-medium"
+                        fileFilter === t.id ? "text-white" : "text-zinc-400 font-medium"
                       }`}
                     >
                       {t.label}
@@ -396,7 +467,7 @@ export default function App() {
               <div className="px-4 py-2.5 flex items-center justify-between text-xs text-zinc-500 bg-zinc-50/70">
                 <span>
                   Sudah Diunduh{" "}
-                  <strong className="text-zinc-800 ml-1">
+                  <strong className="text-white ml-1">
                     {localFiles.filter((x) => fileFilter === "semua" || x.type === fileFilter).length}
                   </strong>
                 </span>
@@ -430,7 +501,7 @@ export default function App() {
 
                       {/* Info Judul, Format, Ukuran & Tanggal */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-xs font-bold text-zinc-900 line-clamp-2 leading-snug">
+                        <h3 className="text-xs font-bold text-white line-clamp-2 leading-snug">
                           {item.name}
                         </h3>
                         <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-zinc-400">
@@ -586,7 +657,7 @@ export default function App() {
             </div>
           ) : (
             tab === "saya" ? (
-  <div style={{ backgroundColor: darkMode ? "#121212" : "#f8fafc", colorScheme: darkMode ? "dark" : "light" }} className={`w-full min-h-screen flex flex-col pb-24 ${darkMode ? "bg-[#121212] text-zinc-100" : "bg-slate-50 text-zinc-900"}`}>
+  <div style={{ backgroundColor: darkMode ? "#121212" : "#f8fafc", colorScheme: darkMode ? "dark" : "light" }} className={`w-full min-h-screen flex flex-col pb-24 ${darkMode ? "bg-[#121212] text-zinc-100" : "bg-slate-50 text-white"}`}>
     {sayaToast && <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 text-white text-xs px-4 py-2 rounded-full">{sayaToast}</div>}
     {sayaSubPage ? (
       <div className="p-4 space-y-3 bg-white min-h-screen">
@@ -679,11 +750,11 @@ export default function App() {
                     type="text"
                     value={dlName}
                     onChange={(e) => setDlName(e.target.value)}
-                    className="w-full border border-sky-500 rounded-lg px-2 py-1 text-xs font-bold text-zinc-900 outline-none"
+                    className="w-full border border-sky-500 rounded-lg px-2 py-1 text-xs font-bold text-white outline-none"
                     autoFocus
                   />
                 ) : (
-                  <h3 className="text-xs font-bold line-clamp-2 leading-snug text-zinc-900">
+                  <h3 className="text-xs font-bold line-clamp-2 leading-snug text-white">
                     {dlName || activeVid.title}
                   </h3>
                 )}
@@ -732,7 +803,7 @@ export default function App() {
                         <span className="w-4 h-4 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px]">
                           ♪
                         </span>
-                        <span className="text-sm font-bold text-zinc-800">Musik</span>
+                        <span className="text-sm font-bold text-white">Musik</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         {formats
@@ -757,7 +828,7 @@ export default function App() {
                                 <div>
                                   <p
                                     className={`text-xs font-bold ${
-                                      active ? "text-rose-500" : "text-zinc-800"
+                                      active ? "text-rose-500" : "text-white"
                                     }`}
                                   >
                                     {f.resolution}
@@ -777,7 +848,7 @@ export default function App() {
                         <span className="w-4 h-4 rounded bg-rose-500 text-white flex items-center justify-center text-[9px]">
                           ▶
                         </span>
-                        <span className="text-sm font-bold text-zinc-800">Video</span>
+                        <span className="text-sm font-bold text-white">Video</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         {formats
@@ -802,7 +873,7 @@ export default function App() {
                                 <div>
                                   <p
                                     className={`text-xs font-bold ${
-                                      active ? "text-rose-500" : "text-zinc-800"
+                                      active ? "text-rose-500" : "text-white"
                                     }`}
                                   >
                                     {f.resolution}
@@ -824,15 +895,63 @@ export default function App() {
             </div>
 
             {dlUrl && (
-              <a
-                href={`${API_URL}/api/download/${encodeURIComponent(((dlName || activeVid.title || "media").replace(/[\/*?:<>|"]/g, "").trim()) + (selIdx.startsWith("audio") ? ".m4a" : ".mp4"))}?url=${encodeURIComponent(dlUrl)}`}
-                onClick={() => setShowModal(false)}
-                className="mt-2 w-full py-3.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm text-center flex items-center justify-center gap-2 shadow-lg"
+              <button
+                type="button"
+                onClick={startModernDownload}
+                className="mt-2 w-full py-3.5 rounded-full bg-gradient-to-r from-orange-500 to-rose-600 hover:opacity-95 text-white font-bold text-sm text-center flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
               >
                 <span>↓</span>
-                <span>UNDUH</span>
-              </a>
+                <span>UNDUH SEKARANG</span>
+              </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {dlTask && (
+        <div className="fixed bottom-20 left-3 right-3 z-50 rounded-2xl bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 p-3.5 shadow-2xl text-white transition-all">
+          <div className="flex items-center gap-3">
+            <div className="relative w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 shrink-0">
+              {dlTask.thumb ? (
+                <img src={dlTask.thumb} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-orange-400 font-bold text-xs">{dlTask.ext}</div>
+              )}
+              <span className="absolute bottom-0.5 right-0.5 px-1 rounded bg-black/80 text-[9px] font-bold text-orange-400">
+                {dlTask.ext}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold truncate text-zinc-100">{dlTask.title}</p>
+                <button
+                  onClick={() => setDlTask(null)}
+                  className="text-zinc-400 hover:text-white text-xs px-1.5 py-0.5 rounded-full bg-zinc-800"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-400">
+                <span>
+                  {dlTask.status === "downloading" && `Mengunduh... ${dlTask.loadedMB} MB / ${dlTask.totalMB} MB`}
+                  {dlTask.status === "done" && `Selesai • ${dlTask.loadedMB} MB tersimpan`}
+                  {dlTask.status === "error" && "Gagal mengunduh file"}
+                </span>
+                <span className="font-bold text-orange-400">{dlTask.progress}%</span>
+              </div>
+              <div className="mt-1.5 w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${
+                    dlTask.status === "done"
+                      ? "bg-emerald-500"
+                      : dlTask.status === "error"
+                      ? "bg-rose-500"
+                      : "bg-gradient-to-r from-orange-500 to-rose-500"
+                  }`}
+                  style={{ width: `${dlTask.progress}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

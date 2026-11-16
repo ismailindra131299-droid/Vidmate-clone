@@ -1,0 +1,17 @@
+{
+  "name": "VidMate Clone - Video & Musik Downloader",
+  "short_name": "VidMate",
+  "description": "Unduh dan putar video serta musik favorit Anda dengan mudah.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
