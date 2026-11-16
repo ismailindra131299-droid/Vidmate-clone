@@ -1,5 +1,5 @@
 // Konfigurasi URL Backend API Anda (Sesuaikan port jika berbeda)
-const BACKEND_API_URL = 'https://434bb5f5eb843a.lhr.life/api/download';
+const BACKEND_API_URL = 'https://51c9f70f8d37e4.lhr.life/api/download';
 
 export interface VideoInfo {
   status: string;
