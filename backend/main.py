@@ -185,7 +185,7 @@ def get_video_info(url: str):
         import json
         vid_match = re.search(r'(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})', url)
         vid_id = vid_match.group(1) if vid_match else url.strip()
-        for inst in ["https://kavin.rocks", "https://tokhmi.xyz", "https://piped.yt"]:
+        for inst in ["https://pipedapi.kavin.rocks", "https://pipedapi.tokhmi.xyz", "https://api.piped.yt"]:
             try:
                 req = urllib.request.Request(f"{inst}/streams/{vid_id}", headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(req, timeout=8) as resp:
@@ -205,7 +205,7 @@ def get_video_info(url: str):
                 if pformats:
                     return {
                         "title": pdata.get("title", "Video"),
-                        "thumbnail": pdata.get("thumbnailUrl", f"https://ytimg.com{vid_id}/hqdefault.jpg"),
+                        "thumbnail": pdata.get("thumbnailUrl", f"https://://ytimg.com/vi/{vid_id}/hqdefault.jpg"),
                         "formats": pformats
                     }
             except Exception:

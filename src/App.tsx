@@ -192,7 +192,7 @@ export default function App() {
     setLoadingStream(true);
     window.scrollTo(0, 0);
     if (v.id && v.id.length === 11) {
-      setStreamUrl("https://youtube.com" + v.id + "?autoplay=1&rel=0");
+      setStreamUrl("https://://youtube.com/embed/" + v.id + "?autoplay=1&rel=0");
       setLoadingStream(false);
       return;
     }
@@ -315,7 +315,7 @@ export default function App() {
                 Memuat pemutar video...
               </div>
             ) : streamUrl ? (
-              streamUrl.includes("://youtube.com") ? (
+              streamUrl.includes("youtube.com") ? (
                 <iframe
                   src={streamUrl}
                   title={activeVid.title}
