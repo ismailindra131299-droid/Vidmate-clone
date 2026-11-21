@@ -183,6 +183,49 @@ export default function App() {
     loadVideos(url.trim());
   };
 
+  const fetchStreamsClient = async (videoId: string) => {
+    try {
+      const res = await fetch("https://://youtube.com/youtubei/v1/player?prettyPrint=false", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId,
+          context: {
+            client: {
+              clientName: "ANDROID",
+              clientVersion: "19.09.37",
+              androidSdkVersion: 30,
+              hl: "id",
+              gl: "ID"
+            }
+          }
+        })
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const sd = data?.streamingData;
+      if (!sd) return null;
+      const list: any[] = [];
+      (sd.adaptiveFormats || []).forEach((f: any) => {
+        if (f.url && (f.mimeType || "").startsWith("audio/")) {
+          const br = Math.round((f.bitrate || 128000) / 1000);
+          const sz = f.contentLength ? `${(Number(f.contentLength) / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
+          list.push({ type: "audio", resolution: `${br}K (M4A)`, ext: "m4a", size: sz, download_url: f.url });
+        }
+      });
+      (sd.formats || []).forEach((f: any) => {
+        if (f.url) {
+          const q = (f.qualityLabel || "360p").toUpperCase();
+          const sz = f.contentLength ? `${(Number(f.contentLength) / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
+          list.push({ type: "video", resolution: `${q} (MP4)`, ext: "mp4", size: sz, download_url: f.url });
+        }
+      });
+      return list;
+    } catch {
+      return null;
+    }
+  };
+
   const openVideo = async (v: any) => {
     setActiveVid(v);
     setWatchHistory((p) => { const u = [v, ...p.filter((x) => x.id !== v.id)].slice(0, 20); localStorage.setItem("vidmate_history", JSON.stringify(u)); return u; });
@@ -214,58 +257,27 @@ export default function App() {
     setSelIdx("audio-0");
     setEditName(false);
     setDlName(activeVid.title || "video");
-    if (formats.length > 0) return;
+    if (formats.length > 0) {
+      setDlUrl(formats.download_url);
+      return;
+    }
     setLoadingFmt(true);
     try {
       let list: any[] = [];
-      try {
+      if (activeVid.id && activeVid.id.length === 11) {
+        const clientList = await fetchStreamsClient(activeVid.id);
+        if (clientList && clientList.length > 0) list = clientList;
+      }
+      if (list.length === 0) {
         const res = await fetch(`${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`);
         if (res.ok) {
           const data = await res.json();
           if (data.formats && data.formats.length > 0) list = data.formats;
         }
-      } catch {}
-
-      if (list.length === 0 && activeVid.id) {
-        const hosts = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://pipedapi.adminforge.de', 'https://inv.nadeko.net', 'https://invidious.fdn.fr'];
-        for (const host of hosts) {
-          try {
-            const isPiped = host.includes("piped");
-            const endpoint = isPiped ? `${host}/streams/${activeVid.id}` : `${host}/api/v1/videos/${activeVid.id}`;
-            const r = await fetch(endpoint);
-            if (!r.ok) continue;
-            const j = await r.json();
-            if (isPiped) {
-              (j.audioStreams || []).slice(0, 3).forEach((a: any) => {
-                if (a.url) {
-                  const br = Math.round((a.bitrate || 128000) / 1000);
-                  const ext = (a.format || "").toLowerCase().includes("m4a") ? "m4a" : "mp3";
-                  const sz = a.contentLength ? `${(a.contentLength / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
-                  list.push({ type: "audio", resolution: `${br}K (${ext.toUpperCase()})`, ext, size: sz, download_url: a.url });
-                }
-              });
-              (j.videoStreams || []).filter((v: any) => v.url && !v.videoOnly).slice(0, 4).forEach((v: any) => {
-                const q = (v.quality || "360p").toUpperCase();
-                const sz = v.contentLength ? `${(v.contentLength / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
-                list.push({ type: "video", resolution: `${q} (MP4)`, ext: "mp4", size: sz, download_url: v.url });
-              });
-            } else {
-              (j.adaptiveFormats || []).filter((f: any) => f.url && (f.type || "").startsWith("audio/")).slice(0, 3).forEach((f: any) => {
-                const br = Math.round((f.bitrate || 128000) / 1000);
-                list.push({ type: "audio", resolution: `${br}K (M4A)`, ext: "m4a", size: "Otomatis", download_url: f.url });
-              });
-              (j.formatStreams || []).filter((f: any) => f.url).slice(0, 4).forEach((f: any) => {
-                list.push({ type: "video", resolution: `${(f.qualityLabel || "360p").toUpperCase()} (MP4)`, ext: "mp4", size: "Otomatis", download_url: f.url });
-              });
-            }
-            if (list.length > 0) break;
-          } catch {}
-        }
       }
-
       if (list.length > 0) {
         setFormats(list);
-        setDlUrl(list[0].download_url);
+        setDlUrl(list.download_url);
       }
     } catch {
       setErr("Gagal mengambil pilihan kualitas.");
