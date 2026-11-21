@@ -191,6 +191,11 @@ export default function App() {
     setStreamUrl("");
     setLoadingStream(true);
     window.scrollTo(0, 0);
+    if (v.id && v.id.length === 11) {
+      setStreamUrl("https://youtube.com" + v.id + "?autoplay=1&rel=0");
+      setLoadingStream(false);
+      return;
+    }
     try {
       const res = await fetch(`${API_URL}/api/stream?id=${v.id}`);
       const data = await res.json();
@@ -310,14 +315,24 @@ export default function App() {
                 Memuat pemutar video...
               </div>
             ) : streamUrl ? (
-              <video
-                src={streamUrl}
-                poster={activeVid.thumbnail}
-                controls
-                autoPlay
-                playsInline
-                className="w-full h-full bg-black"
-              />
+              streamUrl.includes("://youtube.com") ? (
+                <iframe
+                  src={streamUrl}
+                  title={activeVid.title}
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                  className="w-full h-full border-0 bg-black"
+                />
+              ) : (
+                <video
+                  src={streamUrl}
+                  poster={activeVid.thumbnail}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full h-full bg-black"
+                />
+              )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xs text-rose-400">
                 Video tidak dapat diputar

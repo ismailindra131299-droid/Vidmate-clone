@@ -182,6 +182,34 @@ def get_video_info(url: str):
                 "formats": formats
             }
     except Exception as e:
+        import json
+        vid_match = re.search(r'(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})', url)
+        vid_id = vid_match.group(1) if vid_match else url.strip()
+        for inst in ["https://kavin.rocks", "https://tokhmi.xyz", "https://piped.yt"]:
+            try:
+                req = urllib.request.Request(f"{inst}/streams/{vid_id}", headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    pdata = json.loads(resp.read().decode())
+                pformats = []
+                for a in pdata.get("audioStreams", []):
+                    if a.get("url"):
+                        br = int((a.get("bitrate") or 128000) / 1000)
+                        ext = "m4a" if "m4a" in (a.get("format") or "").lower() else "mp3"
+                        sz = f"{round((a.get('contentLength') or 2500000)/(1024*1024), 2)} MB"
+                        pformats.append({"type": "audio", "resolution": f"{br}K ({ext.upper()})", "ext": ext, "size": sz, "download_url": a["url"]})
+                for v in pdata.get("videoStreams", []):
+                    if v.get("url") and not v.get("videoOnly"):
+                        q = v.get("quality") or "360p"
+                        sz = f"{round((v.get('contentLength') or 8000000)/(1024*1024), 2)} MB"
+                        pformats.append({"type": "video", "resolution": f"{q.upper()} (MP4)", "ext": "mp4", "size": sz, "download_url": v["url"]})
+                if pformats:
+                    return {
+                        "title": pdata.get("title", "Video"),
+                        "thumbnail": pdata.get("thumbnailUrl", f"https://ytimg.com{vid_id}/hqdefault.jpg"),
+                        "formats": pformats
+                    }
+            except Exception:
+                continue
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stream")
