@@ -217,20 +217,37 @@ export default function App() {
     if (formats.length > 0) return;
     setLoadingFmt(true);
     try {
-      const res = await fetch(
-        `${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`
-      );
-      const data = await res.json();
-      if (data.formats && data.formats.length > 0) {
-        setFormats(data.formats);
-        setDlUrl(data.formats[0].download_url);
-        if (data.title && activeVid.title === "Video YouTube") {
-          setActiveVid({
-            ...activeVid,
-            title: data.title,
-            channel: data.channel || "YouTube",
-          });
+      let list: any[] = [];
+      const res = await fetch(`${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.formats && data.formats.length > 0) list = data.formats;
+      }
+      if (list.length === 0 && activeVid.id) {
+        const inv = ["https://nadeko.net", "https://nerdvpn.de", "https://yewtu.be"];
+        for (const host of inv) {
+          try {
+            const r = await fetch(`${host}/api/v1/videos/${activeVid.id}`);
+            if (!r.ok) continue;
+            const j = await r.json();
+            (j.adaptiveFormats || []).forEach((f: any) => {
+              if (f.url && (f.type || "").startsWith("audio/")) {
+                const br = Math.round((f.bitrate || 128000) / 1000);
+                list.push({ type: "audio", resolution: `${br}K (M4A)`, ext: "m4a", size: "Otomatis", download_url: f.url });
+              }
+            });
+            (j.formatStreams || []).forEach((f: any) => {
+              if (f.url) {
+                list.push({ type: "video", resolution: `${(f.qualityLabel || "360p").toUpperCase()} (MP4)`, ext: "mp4", size: "Otomatis", download_url: f.url });
+              }
+            });
+            if (list.length > 0) break;
+          } catch {}
         }
+      }
+      if (list.length > 0) {
+        setFormats(list);
+        setDlUrl(list[0].download_url);
       }
     } catch {
       setErr("Gagal mengambil pilihan kualitas.");
@@ -316,13 +333,33 @@ export default function App() {
               </div>
             ) : streamUrl ? (
               streamUrl.includes("youtube.com") ? (
-                <iframe
-                  src={streamUrl}
-                  title={activeVid.title}
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                  className="w-full h-full border-0 bg-black"
-                />
+                <div className="relative w-full h-full bg-black">
+                  <iframe
+                    src={streamUrl}
+                    title={activeVid.title}
+                    allow="autoplay; encrypted-media; fullscreen"
+                    allowFullScreen
+                    className="w-full h-full border-0 bg-black"
+                  />
+                  <button
+                    onClick={async () => {
+                      setLoadingStream(true);
+                      try {
+                        const r = await fetch(`${API_URL}/api/stream?id=${activeVid.id}`);
+                        const d = await r.json();
+                        if (d.stream_url) setStreamUrl(d.stream_url);
+                        else window.open(activeVid.videoUrl, "_blank");
+                      } catch {
+                        window.open(activeVid.videoUrl, "_blank");
+                      } finally {
+                        setLoadingStream(false);
+                      }
+                    }}
+                    className="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] px-2.5 py-1 rounded-full border border-white/20"
+                  >
+                    Pemutar Alternatif ↗
+                  </button>
+                </div>
               ) : (
                 <video
                   src={streamUrl}
