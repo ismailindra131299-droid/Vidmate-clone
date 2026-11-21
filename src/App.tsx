@@ -265,7 +265,7 @@ export default function App() {
 
       if (list.length > 0) {
         setFormats(list);
-        setDlUrl(list.download_url);
+        setDlUrl(list[0].download_url);
       }
     } catch {
       setErr("Gagal mengambil pilihan kualitas.");
