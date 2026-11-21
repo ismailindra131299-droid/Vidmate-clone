@@ -258,7 +258,7 @@ export default function App() {
     setEditName(false);
     setDlName(activeVid.title || "video");
     if (formats.length > 0) {
-      setDlUrl(formats.download_url);
+      setDlUrl(formats.slice(0, 1).map((x: any) => x.download_url).join(""));
       return;
     }
     setLoadingFmt(true);
@@ -277,7 +277,7 @@ export default function App() {
       }
       if (list.length > 0) {
         setFormats(list);
-        setDlUrl(list.download_url);
+        setDlUrl(list.slice(0, 1).map((x: any) => x.download_url).join(""));
       }
     } catch {
       setErr("Gagal mengambil pilihan kualitas.");
