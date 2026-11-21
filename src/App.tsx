@@ -218,36 +218,54 @@ export default function App() {
     setLoadingFmt(true);
     try {
       let list: any[] = [];
-      const res = await fetch(`${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.formats && data.formats.length > 0) list = data.formats;
-      }
+      try {
+        const res = await fetch(`${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.formats && data.formats.length > 0) list = data.formats;
+        }
+      } catch {}
+
       if (list.length === 0 && activeVid.id) {
-        const inv = ["https://nadeko.net", "https://nerdvpn.de", "https://yewtu.be"];
-        for (const host of inv) {
+        const hosts = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://pipedapi.adminforge.de', 'https://inv.nadeko.net', 'https://invidious.fdn.fr'];
+        for (const host of hosts) {
           try {
-            const r = await fetch(`${host}/api/v1/videos/${activeVid.id}`);
+            const isPiped = host.includes("piped");
+            const endpoint = isPiped ? `${host}/streams/${activeVid.id}` : `${host}/api/v1/videos/${activeVid.id}`;
+            const r = await fetch(endpoint);
             if (!r.ok) continue;
             const j = await r.json();
-            (j.adaptiveFormats || []).forEach((f: any) => {
-              if (f.url && (f.type || "").startsWith("audio/")) {
+            if (isPiped) {
+              (j.audioStreams || []).slice(0, 3).forEach((a: any) => {
+                if (a.url) {
+                  const br = Math.round((a.bitrate || 128000) / 1000);
+                  const ext = (a.format || "").toLowerCase().includes("m4a") ? "m4a" : "mp3";
+                  const sz = a.contentLength ? `${(a.contentLength / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
+                  list.push({ type: "audio", resolution: `${br}K (${ext.toUpperCase()})`, ext, size: sz, download_url: a.url });
+                }
+              });
+              (j.videoStreams || []).filter((v: any) => v.url && !v.videoOnly).slice(0, 4).forEach((v: any) => {
+                const q = (v.quality || "360p").toUpperCase();
+                const sz = v.contentLength ? `${(v.contentLength / (1024 * 1024)).toFixed(1)} MB` : "Otomatis";
+                list.push({ type: "video", resolution: `${q} (MP4)`, ext: "mp4", size: sz, download_url: v.url });
+              });
+            } else {
+              (j.adaptiveFormats || []).filter((f: any) => f.url && (f.type || "").startsWith("audio/")).slice(0, 3).forEach((f: any) => {
                 const br = Math.round((f.bitrate || 128000) / 1000);
                 list.push({ type: "audio", resolution: `${br}K (M4A)`, ext: "m4a", size: "Otomatis", download_url: f.url });
-              }
-            });
-            (j.formatStreams || []).forEach((f: any) => {
-              if (f.url) {
+              });
+              (j.formatStreams || []).filter((f: any) => f.url).slice(0, 4).forEach((f: any) => {
                 list.push({ type: "video", resolution: `${(f.qualityLabel || "360p").toUpperCase()} (MP4)`, ext: "mp4", size: "Otomatis", download_url: f.url });
-              }
-            });
+              });
+            }
             if (list.length > 0) break;
           } catch {}
         }
       }
+
       if (list.length > 0) {
         setFormats(list);
-        setDlUrl(list[0].download_url);
+        setDlUrl(list.download_url);
       }
     } catch {
       setErr("Gagal mengambil pilihan kualitas.");
@@ -333,33 +351,14 @@ export default function App() {
               </div>
             ) : streamUrl ? (
               streamUrl.includes("youtube.com") ? (
-                <div className="relative w-full h-full bg-black">
-                  <iframe
-                    src={streamUrl}
-                    title={activeVid.title}
-                    allow="autoplay; encrypted-media; fullscreen"
-                    allowFullScreen
-                    className="w-full h-full border-0 bg-black"
-                  />
-                  <button
-                    onClick={async () => {
-                      setLoadingStream(true);
-                      try {
-                        const r = await fetch(`${API_URL}/api/stream?id=${activeVid.id}`);
-                        const d = await r.json();
-                        if (d.stream_url) setStreamUrl(d.stream_url);
-                        else window.open(activeVid.videoUrl, "_blank");
-                      } catch {
-                        window.open(activeVid.videoUrl, "_blank");
-                      } finally {
-                        setLoadingStream(false);
-                      }
-                    }}
-                    className="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] px-2.5 py-1 rounded-full border border-white/20"
-                  >
-                    Pemutar Alternatif ↗
-                  </button>
-                </div>
+                <iframe
+                  src={streamUrl}
+                  title={activeVid.title}
+                  referrerPolicy="no-referrer"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                  allowFullScreen
+                  className="w-full h-full border-0 bg-black"
+                />
               ) : (
                 <video
                   src={streamUrl}
