@@ -42,7 +42,7 @@ def extract_video_id(url_or_id: str) -> str:
     m = re.search(r"(?:v=|youtu\.be/|embed/|shorts/)([a-zA-Z0-9_-]{11})", url_or_id)
     if m:
         return m.group(1)
-    if re.match(r)^[a-zA-Z0-9_-]{11}$", url_or_id.strip()):
+    if re.match(r"^[a-zA-Z0-9_-]+$", url_or_id.strip()) and len(url_or_id.strip()) == 11:
         return url_or_id.strip()
     return ""
 
@@ -176,7 +176,7 @@ async def get_video_info(url: str = ""):
                 acodec = fmt.get("acodec", "none")
                 ext = fmt.get("ext", "mp4")
                 size_b = fmt.get("filesize") or fmt.get("filesize_approx") or 0
-                if not fallback_url and vcodec != "none" and acodec != "none:
+                if not fallback_url and vcodec != "none" and acodec != "none":
                     fallback_url = u
                     if size_b > 0:
                         base_size = size_b
@@ -255,7 +255,7 @@ async def proxy_download(filename: str, url: str = Query(...)):
             finally:
                 upstream.close()
 
-        headers = {"Content-Disposition": f"attachment; filename*=UTF-8'{'}{quote(filename)}"}
+        headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
         if content_length:
             headers["Content-Length"] = content_length
 
