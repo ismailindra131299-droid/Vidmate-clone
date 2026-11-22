@@ -183,7 +183,7 @@ export default function App() {
     loadVideos(url.trim());
   };
 
-  const fetchStreamsClient = async (videoId: string) => {
+  const _fetchStreamsClient = async (videoId: string) => {
     try {
       const res = await fetch("https://://youtube.com/youtubei/v1/player?prettyPrint=false", {
         method: "POST",
@@ -226,6 +226,7 @@ export default function App() {
     }
   };
 
+  void _fetchStreamsClient;
   const openVideo = async (v: any) => {
     setActiveVid(v);
     setWatchHistory((p) => { const u = [v, ...p.filter((x) => x.id !== v.id)].slice(0, 20); localStorage.setItem("vidmate_history", JSON.stringify(u)); return u; });
@@ -265,8 +266,7 @@ export default function App() {
     try {
       let list: any[] = [];
       if (activeVid.id && activeVid.id.length === 11) {
-        const clientList = await fetchStreamsClient(activeVid.id);
-        if (clientList && clientList.length > 0) list = clientList;
+        
       }
       if (list.length === 0) {
         const res = await fetch(`${API_URL}/api/info?url=${encodeURIComponent(activeVid.videoUrl)}`);
@@ -362,11 +362,11 @@ export default function App() {
                 Memuat pemutar video...
               </div>
             ) : streamUrl ? (
-              streamUrl.includes("youtube.com") ? (
+              (streamUrl.includes("youtube.com") || streamUrl.includes("youtube-nocookie.com")) ? (
                 <iframe
                   src={streamUrl}
                   title={activeVid.title}
-                  referrerPolicy="no-referrer"
+                  referrerPolicy="strict-origin-when-cross-origin"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                   allowFullScreen
                   className="w-full h-full border-0 bg-black"

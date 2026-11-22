@@ -1,14 +1,10 @@
-from datetime import datetime
-from fastapi.responses import FileResponse
-import os
-from urllib.parse import quote
-from fastapi.responses import StreamingResponse
-import urllib.request, re
-import random
-import re
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from urllib.parse import quote
+import urllib.request
+import json
+import re
 import yt_dlp
 
 app = FastAPI()
@@ -21,9 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class DownloadRequest(BaseModel):
-    url: str
-    quality: str = "best"
+PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.tokhmi.xyz",
+    "https://api.piped.yt",
+    "https://pipedapi.adminforge.de"
+]
 
 def format_duration(duration_seconds):
     if not duration_seconds:
@@ -36,292 +35,230 @@ def format_duration(duration_seconds):
         if hours > 0:
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         return f"{minutes:02d}:{secs:02d}"
-    except:
+    except Exception:
         return "00:00"
 
+def extract_video_id(url_or_id: str) -> str:
+    m = re.search(r"(?:v=|youtu\.be/|embed/|shorts/)([a-zA-Z0-9_-]{11})", url_or_id)
+    if m:
+        return m.group(1)
+    if re.match(r)^[a-zA-Z0-9_-]{11}$", url_or_id.strip()):
+        return url_or_id.strip()
+    return ""
+
+def get_ydl_opts():
+    return {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "tv_embedded"]
+            }
+        }
+    }
+
+def fetch_piped_streams(video_id: str):
+    for inst in PIPED_INSTANCES:
+        try:
+            req = urllib.request.Request(f"{inst}/streams/{video_id}", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return json.loads(resp.read().decode())
+        except Exception:
+            continue
+    return None
+
+def make_yt_url(vid: str) -> str:
+    return "https://www.youtube.com/watch?v=" + vid
+
+def make_embed_url(vid: str) -> str:
+    return "https://www.youtube-nocookie.com/embed/" + vid + "?autoplay=1&rel=0&playsinline=1"
 @app.get("/api/trending")
 async def get_trending_videos():
     try:
-        ydl_opts = {'format': 'best', 'noplaylist': True, 'quiet': True, 'extract_flat': True}
+        ydl_opts = {"format": "best", "noplaylist": True, "quiet": True, "extract_flat": True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info("ytsearch25:musik indonesia terbaru 2026", download=False)
+            info_dict = ydl.extract_info("ytsearch20:musik indonesia terbaru 2026", download=False)
             videos = []
-            if 'entries' in info_dict:
-                for entry in info_dict['entries']:
-                    video_id = entry.get("id", "")
-                    if not video_id:
-                        continue
-                    img_url = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
-                    videos.append({
-                        "id": video_id,
-                        "title": entry.get("title", "Video Tanpa Judul"),
-                        "channel": entry.get("uploader", "Saluran Tidak Diketahui"),
-                        "views": "Rekomendasi",
-                        "time": "Hari ini",
-                        "duration": format_duration(entry.get("duration")),
-                        "thumbnail": img_url,
-                        "videoUrl": f"https://youtube.com/watch?v={video_id}"
-                    })
-                random.shuffle(videos)
+            for entry in info_dict.get("entries", []):
+                vid = entry.get("id", "")
+                if not vid:
+                    continue
+                videos.append({
+                    "id": vid,
+                    "title": entry.get("title", "Video Tanpa Judul"),
+                    "channel": entry.get("uploader", "Saluran Tidak Diketahui"),
+                    "views": "Rekomendasi",
+                    "time": "Hari ini",
+                    "duration": format_duration(entry.get("duration")),
+                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                    "videoUrl": make_yt_url(vid)
+                })
             return {"status": "success", "videos": videos}
-    except:
-        return {"status": "fallback", "videos": []}
+    except Exception as e:
+        return {"status": "fallback", "message": str(e), "videos": []}
 
 @app.get("/api/search")
 async def search_videos(q: str = ""):
     try:
-        ydl_opts = {'format': 'best', 'noplaylist': True, 'quiet': True, 'extract_flat': True}
-        videos = []
+        ydl_opts = {"format": "best", "noplaylist": True, "quiet": True, "extract_flat": True}
+        keyword = q.strip() if q.strip() else "lagu tren indonesia terupdate"
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            keyword_search = q.strip() if q.strip() else "lagu tren indonesia terupdate"
-            info_dict = ydl.extract_info(f"ytsearch12:{keyword_search}", download=False)
-            if 'entries' in info_dict:
-                for entry in info_dict['entries']:
-                    video_id = entry.get("id", "")
-                    if not video_id:
-                        continue
-                    img_url = f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
-                    videos.append({
-                        "id": video_id,
-                        "title": entry.get("title", "Video"),
-                        "channel": entry.get("uploader", "Unknown"),
-                        "views": "Hasil Pencarian",
-                        "time": "Baru",
-                        "duration": format_duration(entry.get("duration")),
-                        "thumbnail": img_url,
-                        "videoUrl": f"https://youtube.com/watch?v={video_id}"
-                    })
-        return {"status": "success", "videos": videos}
+            info_dict = ydl.extract_info(f"ytsearch15:{keyword}", download=False)
+            videos = []
+            for entry in info_dict.get("entries", []):
+                vid = entry.get("id", "")
+                if not vid:
+                    continue
+                videos.append({
+                    "id": vid,
+                    "title": entry.get("title", "Video"),
+                    "channel": entry.get("uploader", "Unknown"),
+                    "views": "Hasil Pencarian",
+                    "time": "Baru",
+                    "duration": format_duration(entry.get("duration")),
+                    "thumbnail": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+                    "videoUrl": make_yt_url(vid)
+                })
+            return {"status": "success", "videos": videos}
     except Exception as e:
         return {"status": "error", "message": str(e), "videos": []}
 
-@app.post("/api/download")
-async def download_video(request: DownloadRequest):
+@app.get("/api/stream")
+async def get_stream_url(id: str = ""):
+    vid = extract_video_id(id)
+    if not vid:
+        raise HTTPException(status_code=400, detail="ID video tidak valid")
+    target = make_yt_url(vid)
     try:
-        input_user = request.url.strip()
-        is_url = re.match(r'^https?://', input_user)
-        url_target = input_user if is_url else f"ytsearch1:{input_user}"
-        ydl_opts = {'format': 'bestvideo+bestaudio/best', 'noplaylist': True, 'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url_target, download=False)
-            if 'entries' in info_dict:
-                if len(info_dict['entries']) > 0:
-                    info_dict = info_dict['entries']
-                else:
-                    raise HTTPException(status_code=404, detail="Video tidak ditemukan")
-            download_url = info_dict.get('url')
-            if not download_url and 'formats' in info_dict:
-                valid_formats = [f for f in info_dict['formats'] if f.get('url')]
-                if valid_formats:
-                    download_url = valid_formats[-1]['url']
-            if not download_url:
-                raise HTTPException(status_code=400, detail="Tautan unduhan tidak ditemukan")
-            return {
-                "status": "success",
-                "title": info_dict.get('title', 'Video'),
-                "download_url": download_url
-            }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        opts = get_ydl_opts()
+        opts["format"] = "best[ext=mp4][acodec!=none][vcodec!=none]/best[acodec!=none][vcodec!=none]/best"
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(target, download=False)
+            if info.get("url") and ".m3u8" not in info.get("url", ""):
+                return {"status": "success", "stream_url": info["url"]}
+            for fmt in reversed(info.get("formats", [])):
+                u = fmt.get("url", "")
+                if u and ".m3u8" not in u and fmt.get("vcodec") != "none" and fmt.get("acodec") != "none":
+                    return {"status": "success", "stream_url": u}
+    except Exception:
+        pass
 
+    pdata = fetch_piped_streams(vid)
+    if pdata:
+        for vs in pdata.get("videoStreams", []):
+            if not vs.get("videoOnly") and vs.get("url"):
+                return {"status": "success", "stream_url": vs["url"]}
+
+    return {"status": "embed", "stream_url": make_embed_url(vid)}
 @app.get("/api/info")
-def get_video_info(url: str):
+async def get_video_info(url: str = ""):
+    vid = extract_video_id(url)
+    target = make_yt_url(vid) if vid else url.strip()
+    formats = []
+    seen = set()
+    title = "Media Video"
+    thumbnail = f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg" if vid else ""
+
     try:
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "extractor_args": {"youtube": {"player_client": ["tv_embedded", "web_creator", "android"]}}
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = []
-            seen = set()
+        with yt_dlp.YoutubeDL(get_ydl_opts()) as ydl:
+            info = ydl.extract_info(target, download=False)
+            title = info.get("title", title)
+            thumbnail = info.get("thumbnail", thumbnail)
             fallback_url = ""
-            base_size = 0
+            base_size = 8000000
+
             for fmt in info.get("formats", []):
-                u = fmt.get("url")
+                u = fmt.get("url", "")
                 if not u or ".m3u8" in u:
                     continue
-                if not fallback_url and fmt.get("vcodec") != "none" and fmt.get("acodec") != "none":
-                    fallback_url = u
-                    base_size = fmt.get("filesize") or fmt.get("filesize_approx") or 8000000
-                ext = fmt.get("ext", "")
                 vcodec = fmt.get("vcodec", "none")
                 acodec = fmt.get("acodec", "none")
+                ext = fmt.get("ext", "mp4")
                 size_b = fmt.get("filesize") or fmt.get("filesize_approx") or 0
-                size_str = f"{round(size_b / (1024*1024), 2)} MB" if size_b else "Otomatis"
+                if not fallback_url and vcodec != "none" and acodec != "none:
+                    fallback_url = u
+                    if size_b > 0:
+                        base_size = size_b
+
+                size_str = f"{round(size_b / (1024 * 1024), 1)} MB" if size_b > 0 else "Otomatis"
                 if vcodec == "none" and acodec != "none" and ext in ["m4a", "webm", "mp3"]:
                     abr = int(fmt.get("abr") or 128)
-                    label = f"{abr}K ({ext.upper()})"
-                    if label not in seen:
-                        seen.add(label)
-                        formats.append({"type": "audio", "resolution": label, "ext": ext, "size": size_str, "download_url": u})
-                elif vcodec != "none" and ext in ["mp4", "webm"]:
-                    h = fmt.get("height")
-                    if h:
-                        label = f"{h}P (MP4)"
-                        if label not in seen:
-                            seen.add(label)
-                            pass
+                    lbl = f"{abr}K (M4A)"
+                    if lbl not in seen:
+                        seen.add(lbl)
+                        formats.append({"type": "audio", "resolution": lbl, "ext": "m4a", "size": size_str, "download_url": u})
+                elif vcodec != "none" and acodec != "none" and ext in ["mp4", "webm"]:
+                    h = fmt.get("height") or 360
+                    lbl = f"{h}P (MP4)"
+                    if lbl not in seen:
+                        seen.add(lbl)
+                        formats.append({"type": "video", "resolution": lbl, "ext": "mp4", "size": size_str, "download_url": u})
 
-            # Lengkapi pilihan Musik & Video standar jika YouTube hanya mengirim 1 stream dari HP
             if fallback_url:
-                mb = round(base_size / (1024 * 1024), 2)
-                for a_lbl, mult in [("128K (M4A)", 0.45), ("128K (MP3)", 0.48), ("48K (MP3)", 0.2), ("256K (MP3)", 0.85)]:
-                    if a_lbl not in seen and len([x for x in formats if x["type"] == "audio"]) < 4:
+                mb = round(base_size / (1024 * 1024), 1)
+                for a_lbl, mult in [("128K (M4A)", 0.35), ("48K (MP3)", 0.18), ("256K (M4A)", 0.65)]:
+                    if a_lbl not in seen and len([x for x in formats if x["type"] == "audio"]) < 3:
                         seen.add(a_lbl)
-                        formats.append({"type": "audio", "resolution": a_lbl, "ext": "m4a", "size": f"{round(mb*mult, 2)} MB", "download_url": fallback_url})
-                for v_lbl, mult in [("144P (MP4)", 0.4), ("240P (MP4)", 0.65), ("360P (MP4)", 1.0), ("480P (MP4)", 1.45)]:
-                    if v_lbl not in seen and len([x for x in formats if x["type"] == "video"]) < 4:
+                        formats.append({"type": "audio", "resolution": a_lbl, "ext": "m4a", "size": f"{round(mb * mult, 1)} MB", "download_url": fallback_url})
+                for v_lbl, mult in [("360P (MP4)", 1.0), ("480P (MP4)", 1.4), ("720P (MP4)", 2.1)]:
+                    if v_lbl not in seen and len([x for x in formats if x["type"] == "video"]) < 3:
                         seen.add(v_lbl)
-                        formats.append({"type": "video", "resolution": v_lbl, "ext": "mp4", "size": f"{round(mb*mult, 2)} MB", "download_url": fallback_url})
+                        formats.append({"type": "video", "resolution": v_lbl, "ext": "mp4", "size": f"{round(mb * mult, 1)} MB", "download_url": fallback_url})
+    except Exception:
+        pass
 
-            return {
-                "title": info.get("title"),
-                "thumbnail": info.get("thumbnail"),
-                "formats": formats
-            }
-    except Exception as e:
-        import json
-        vid_match = re.search(r'(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})', url)
-        vid_id = vid_match.group(1) if vid_match else url.strip()
-        for inst in ["https://pipedapi.kavin.rocks", "https://pipedapi.tokhmi.xyz", "https://api.piped.yt"]:
-            try:
-                req = urllib.request.Request(f"{inst}/streams/{vid_id}", headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(req, timeout=8) as resp:
-                    pdata = json.loads(resp.read().decode())
-                pformats = []
-                for a in pdata.get("audioStreams", []):
-                    if a.get("url"):
-                        br = int((a.get("bitrate") or 128000) / 1000)
-                        ext = "m4a" if "m4a" in (a.get("format") or "").lower() else "mp3"
-                        sz = f"{round((a.get('contentLength') or 2500000)/(1024*1024), 2)} MB"
-                        pformats.append({"type": "audio", "resolution": f"{br}K ({ext.upper()})", "ext": ext, "size": sz, "download_url": a["url"]})
-                for v in pdata.get("videoStreams", []):
-                    if v.get("url") and not v.get("videoOnly"):
-                        q = v.get("quality") or "360p"
-                        sz = f"{round((v.get('contentLength') or 8000000)/(1024*1024), 2)} MB"
-                        pformats.append({"type": "video", "resolution": f"{q.upper()} (MP4)", "ext": "mp4", "size": sz, "download_url": v["url"]})
-                if pformats:
-                    return {
-                        "title": pdata.get("title", "Video"),
-                        "thumbnail": pdata.get("thumbnailUrl", f"https://://ytimg.com/vi/{vid_id}/hqdefault.jpg"),
-                        "formats": pformats
-                    }
-            except Exception:
-                continue
-        raise HTTPException(status_code=500, detail=str(e))
+    if not formats and vid:
+        pdata = fetch_piped_streams(vid)
+        if pdata:
+            title = pdata.get("title", title)
+            for a in pdata.get("audioStreams", []):
+                if a.get("url"):
+                    br = int((a.get("bitrate") or 128000) / 1000)
+                    lbl = f"{br}K (M4A)"
+                    if lbl not in seen:
+                        seen.add(lbl)
+                        sz = f"{round((a.get("contentLength") or 2500000) / (1024 * 1024), 1)} MB"
+                        formats.append({"type": "audio", "resolution": lbl, "ext": "m4a", "size": sz, "download_url": a["url"]})
+            for v in pdata.get("videoStreams", []):
+                if v.get("url") and not v.get("videoOnly"):
+                    q = v.get("quality", "360p").upper()
+                    lbl = f"{q} (MP4)"
+                    if lbl not in seen:
+                        seen.add(lbl)
+                        sz = f"{round((v.get("contentLength") or 8000000) / (1024 * 1024), 1)} MB"
+                        formats.append({"type": "video", "resolution": lbl, "ext": "mp4", "size": sz, "download_url": v["url"]})
 
-@app.get("/api/stream")
-async def stream_video(id: str):
-    try:
-        ydl_opts = {"quiet": True, "extractor_args": {"youtube": {"player_client": ["android"]}}}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"https://youtu.be/{id}", download=False)
-            url = info.get("url", "")
-            if not url:
-                for fmt in reversed(info.get("formats", [])):
-                    if fmt.get("vcodec") != "none" and fmt.get("acodec") != "none" and fmt.get("ext") == "mp4" and fmt.get("url"):
-                        url = fmt["url"]
-                        break
-            return {"stream_url": url}
-    except Exception as e:
-        return {"stream_url": "", "error": str(e)}
-
+    return {"title": title, "thumbnail": thumbnail, "formats": formats}
 
 @app.get("/api/download/{filename}")
-def download_file(filename: str, url: str):
-    safe_name = "".join(c for c in filename if c not in "\\/*?:<>|").strip() or "media"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    resp = urllib.request.urlopen(req)
-    def iterfile():
-        while True:
-            chunk = resp.read(65536)
-            if not chunk:
-                break
-            yield chunk
-    ascii_name = safe_name.encode("ascii", "ignore").decode() or "media.mp4"
-    headers = {"Content-Disposition": f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe_name)}"}
-    if resp.headers.get("Content-Length"):
-        headers["Content-Length"] = resp.headers.get("Content-Length")
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers=headers)
+async def proxy_download(filename: str, url: str = Query(...)):
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                "Referer": "https://www.youtube.com/"
+            }
+        )
+        upstream = urllib.request.urlopen(req, timeout=20)
+        content_length = upstream.headers.get("Content-Length")
+        content_type = upstream.headers.get("Content-Type", "application/octet-stream")
 
-
-STORAGE_ROOTS = [
-    "/storage/emulated/0",
-    os.path.expanduser("~/storage/shared"),
-]
-STORAGE_ROOT = next((p for p in STORAGE_ROOTS if os.path.exists(p)), os.path.expanduser("~/storage/downloads"))
-
-AUDIO_EXTS = (".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac")
-VIDEO_EXTS = (".mp4", ".mkv", ".webm", ".mov", ".3gp", ".avi")
-SKIP_DIRS = {"Android", ".thumbnails", ".cache", "cache", "tmp", ".git", "node_modules"}
-
-def scan_all_device_media():
-    items = []
-    seen_paths = set()
-    if not os.path.exists(STORAGE_ROOT):
-        return items
-    for root, dirs, files in os.walk(STORAGE_ROOT):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS]
-        for fname in files:
-            if fname.startswith("."):
-                continue
-            low = fname.lower()
-            if not (low.endswith(AUDIO_EXTS) or low.endswith(VIDEO_EXTS)):
-                continue
-            fpath = os.path.join(root, fname)
-            if fpath in seen_paths:
-                continue
-            seen_paths.add(fpath)
+        def iterfile():
             try:
-                stat = os.stat(fpath)
-                size_mb = round(stat.st_size / (1024 * 1024), 2)
-                if size_mb < 0.05:
-                    continue
-                mtime_raw = stat.st_mtime
-                mtime = datetime.fromtimestamp(mtime_raw).strftime("%Y-%m-%d")
-                ext = fname.rsplit(".", 1)[-1].upper()
-                is_audio = low.endswith(AUDIO_EXTS)
-                folder_name = os.path.basename(root) or "Internal"
-                items.append({
-                    "name": fname,
-                    "folder": folder_name,
-                    "size": f"{size_mb} MB",
-                    "date": mtime,
-                    "mtime": mtime_raw,
-                    "ext": ext,
-                    "type": "audio" if is_audio else "video",
-                    "url": f"http://localhost:5000/api/local-media?path={quote(fpath)}"
-                })
-            except Exception:
-                continue
-    items.sort(key=lambda x: x["mtime"], reverse=True)
-    return items
+                while True:
+                    chunk = upstream.read(65536)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                upstream.close()
 
-@app.get("/api/local-files")
-def list_local_files():
-    return {"files": scan_all_device_media()}
+        headers = {"Content-Disposition": f"attachment; filename*=UTF-8'{'}{quote(filename)}"}
+        if content_length:
+            headers["Content-Length"] = content_length
 
-@app.get("/api/local-media")
-def serve_local_media_by_path(path: str):
-    real_root = os.path.realpath(STORAGE_ROOT)
-    real_path = os.path.realpath(path)
-    if real_path.startswith(real_root) and os.path.isfile(real_path):
-        return FileResponse(real_path)
-    raise HTTPException(status_code=404, detail="File tidak ditemukan")
-
-@app.get("/api/local-media/{filename}")
-def serve_local_media(filename: str):
-    from urllib.parse import unquote
-    for item in scan_all_device_media():
-        if item["name"] == filename:
-            raw_path = item["url"].split("path=", 1)[-1]
-            fpath = unquote(raw_path)
-            if os.path.isfile(fpath):
-                return FileResponse(fpath)
-    raise HTTPException(status_code=404, detail="File tidak ditemukan")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=5000, reload=True)
+        return StreamingResponse(iterfile(), media_type=content_type, headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gagal mengunduh stream: {str(e)}")

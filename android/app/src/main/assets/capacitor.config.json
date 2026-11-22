@@ -1,5 +1,10 @@
 {
 	"appId": "com.vidmate.clone",
 	"appName": "VidMate Clone",
-	"webDir": "dist"
+	"webDir": "dist",
+	"server": {
+		"allowNavigation": [
+			"*"
+		]
+	}
 }
